@@ -14,6 +14,7 @@ The Names are taken from the SpecimenNameFrame
 #SpecimenDataFrame = [None, None, None, None, None, None, None]
 SpecimenDataFrame = ["1221-14-5", "25", "0,62", None, None, None, None]
 SpecimenNameFrame = ["PKID", "Temp", "Humidity", "Weight", "Measurement1", "Measurement2", "Measurement3"]
+#TODO: combine SpecimendataFrame and
 broker="192.168.192.21"
 port=1883
 logging.basicConfig(level=logging.INFO)
@@ -22,6 +23,15 @@ logging.basicConfig(level=logging.INFO)
 class MqttCommunicator:
 
     def __init__(self, client_name, mqtt_broker, mqtt_port, mqtt_username, mqtt_passkey, nameframe):
+        """
+        :param client_name: Name for the mqtt client Type: str
+        :param mqtt_broker: ip or url of the mqtt broker Type: str
+        :param mqtt_port: port of the mqtt broker Type:int
+        :param mqtt_username: User to log on mqtt broker Type:str
+        :param mqtt_passkey: Passkey to log on mqtt broker Type:str
+        :param nameframe: Corresponding names for the Data stored in the Specimen Dataframe
+        """
+        #asign variables
         self.Client_Name = client_name
         self.mqtt_Broker = mqtt_broker
         self.mqtt_Port = mqtt_port
@@ -35,14 +45,13 @@ class MqttCommunicator:
         if self.mqtt_Username not in ["", None]  or self.mqtt_Passkey not in ["", None]:
             self.mqtt_client.username_pw_set(self.mqtt_Username, self.mqtt_Passkey)
         else:
-            logging.info("the server is not using a User autentification")
+            logging.info("the server is not using a User authentication")
 
         self.mqtt_client.on_connect = self.on_connect
         self.mqtt_client.on_publish = self.on_publish
         self.mqtt_client.connect(mqtt_broker, mqtt_port)
 
-
-    def on_publish(self, client,userdata,result):
+    def on_publish(self, client, userdata, result):
         print("data published \n")
         logging.info("data published")
         pass
@@ -58,7 +67,7 @@ class MqttCommunicator:
             logging.ERROR("Bad connection Returned code=" + rc + "" + self.mqtt_Broker + ":" + self.mqtt_Port + " username: "
                          + self.mqtt_Username + " Passkey: " + self.mqtt_Passkey)
 
-    def publish_data(self,dataframe):
+    def publish_data(self, dataframe):
         """
         :param dataframe: Takes the Dataframe with the Specimen Data to publish via mqtt
         :return: retuns the actually published Data as a list of String.
@@ -73,10 +82,10 @@ class MqttCommunicator:
                 pkid = str(dataframe[0])
                 Dataframe_length = int(len(dataframe))
 
-                for x in range(1,Dataframe_length):
+                for x in range(1, Dataframe_length):
                     if dataframe[x] not in ["", None]:
                         mqtt_Topic = str(pkid + "/" + str(self.NameFrame[x]))
-                        published_DataFrame.append(self.NameFrame[x] + dataframe[x])
+                        published_DataFrame.append(self.NameFrame[x] + " " + dataframe[x])
                         try:
                             self.mqtt_client.publish(mqtt_Topic, str(dataframe[x]))
                         except:
@@ -110,8 +119,6 @@ Client = MqttCommunicator("pi1", broker, port, "", "", SpecimenNameFrame)
 for y in range(0,20):
     NewFrame = randomize_Dataframe(SpecimenDataFrame)
     SpecimenDataFrame = NewFrame
-    print(SpecimenDataFrame)
-    print(SpecimenNameFrame)
 
     res = Client.publish_data(SpecimenDataFrame)
     print(res)
