@@ -1,48 +1,118 @@
 import paho.mqtt.client as mqtt
 import logging
-
+import time
+import random
 #TODO: implement Configparser
 
 #Variable Declerations
 """
 The contained Data in this Dataframe is of Type String
 The order of the Elements is to be respected 0 to 6
-SpecimenDataFrame = [PKID, Temp, Humidity, Weight, Messurment 1, Messurment 2, Messurment 3]
+SpecimenDataFrame = [PKID, Temp, Humidity, Weight, Measurement 1, Measurement 2, Measurement 3]
+The Names are taken from the SpecimenNameFrame
 """
-SpecimenDataFrame = [none, none, none, none, none, none, none]
-mqtt_broker="192.168.178.53"
-mqtt_port=1883
-
-def on_publish(client,userdata,result):
-    print("data published \n")
-    logging.info("data published")
-    pass
+#SpecimenDataFrame = [None, None, None, None, None, None, None]
+SpecimenDataFrame = ["1221-14-5", "25", "0,62", None, None, None, None]
+SpecimenNameFrame = ["PKID", "Temp", "Humidity", "Weight", "Measurement1", "Measurement2", "Measurement3"]
+broker="192.168.192.21"
+port=1883
+logging.basicConfig(level=logging.INFO)
 
 
-def on_connect(client, userdata, flags, rc):
-    logging.info("Connected flags" + str(flags) + "result code " \
-                 + str(rc) + "client1_id ")
-    client.connected_flag = True
+class MqttCommunicator:
 
-    print>("Connected flags" + str(flags) + "result code " \
-                 + str(rc) + "client1_id ")
+    def __init__(self, client_name, mqtt_broker, mqtt_port, mqtt_username, mqtt_passkey, nameframe):
+        self.Client_Name = client_name
+        self.mqtt_Broker = mqtt_broker
+        self.mqtt_Port = mqtt_port
+        self.mqtt_Username = mqtt_username
+        self.mqtt_Passkey = mqtt_passkey
+        self.NameFrame = nameframe
 
-def publish_data(PKID, Data_Type, Data):
+        #setup mqtt client
+        self.mqtt_client = mqtt.Client(self.Client_Name)
 
+        if self.mqtt_Username not in ["", None]  or self.mqtt_Passkey not in ["", None]:
+            self.mqtt_client.username_pw_set(self.mqtt_Username, self.mqtt_Passkey)
+        else:
+            logging.info("the server is not using a User autentification")
+
+        self.mqtt_client.on_connect = self.on_connect
+        self.mqtt_client.on_publish = self.on_publish
+        self.mqtt_client.connect(mqtt_broker, mqtt_port)
+
+
+    def on_publish(self, client,userdata,result):
+        print("data published \n")
+        logging.info("data published")
+        pass
+
+    def on_connect(self, client, userdata, flags, rc):
+        if rc == 0:
+            client.connected_flag = True
+            print("connected OK")
+            logging.info("connected OK, Server: " + self.mqtt_Broker + ":" + self.mqtt_Port + " username: "
+                         + self.mqtt_Username + " Passkey: " + self.mqtt_Passkey)
+        else:
+            print("Bad connection Returned code=", rc)
+            logging.ERROR("Bad connection Returned code=" + rc + "" + self.mqtt_Broker + ":" + self.mqtt_Port + " username: "
+                         + self.mqtt_Username + " Passkey: " + self.mqtt_Passkey)
+
+    def publish_data(self,dataframe):
+        """
+        :param dataframe: Takes the Dataframe with the Specimen Data to publish via mqtt
+        :return: retuns the actually published Data as a list of String.
+
+        method goes throw the Dataframe and publishes each measurement not None to the corresponding Topic under the
+        Topic of the PKID transfeared in the Dataframe
+        """
+        published_DataFrame = []
+        if len(dataframe) == len(self.NameFrame):
+
+            if dataframe[0] not in [""]:
+                pkid = str(dataframe[0])
+                Dataframe_length = int(len(dataframe))
+
+                for x in range(1,Dataframe_length):
+                    if dataframe[x] not in ["", None]:
+                        mqtt_Topic = str(pkid + "/" + str(self.NameFrame[x]))
+                        published_DataFrame.append(self.NameFrame[x] + dataframe[x])
+                        try:
+                            self.mqtt_client.publish(mqtt_Topic, str(dataframe[x]))
+                        except:
+                            logging.info("Error while publishing Data to the mqtt broker")
+            else:
+                logging.ERROR("no PKID defined! Was not able to publish Information")
+        else:
+            logging.ERROR("not all elements of the SpecimenDataFrame are named. Check the SpecimenNameFrame!")
+        return published_DataFrame
+
+def randomize_Dataframe(dataFrame):
     """
-    :param PKID:        Probenkörper ID obtained from Barcode Scan or manual entry :str:
-    :param Data_Type:   Temp , Humidity, Mesurments, weight :str:
-    :param Data:        coressponding Data Type can be :str: :int: or Dataframes
-    :return:            payload
-    """
-    try:
-        mqtt_Topic = PKID + "/" + Data_Type
-        client.publish(mqtt_Topic, str(Data))
-    except:
-        logging.info("Error while publishinng Data to the mqtt broker")
+    :param dataFrame: takes the Dataframe Type List
+    :return: returns modified Dataframe List
 
-client = mqtt.Client("Python client 1")
-client.on_connect = on_connect
-client.on_publish = on_publish
-client.connect(mqtt_broker,mqtt_port)
-publish_data("Probekörper42", "Temp", 24)
+    method is for debugging and test purposes. It simulates Sensor Data input in form of randomized Data
+    """
+
+    dataFrame[1] = str(random.randint(10,30))
+    dataFrame[2] = str(round(random.uniform(0.1, 1),2))
+
+    return dataFrame
+
+
+#main
+
+
+Client = MqttCommunicator("pi1", broker, port, "", "", SpecimenNameFrame)
+
+
+for y in range(0,20):
+    NewFrame = randomize_Dataframe(SpecimenDataFrame)
+    SpecimenDataFrame = NewFrame
+    print(SpecimenDataFrame)
+    print(SpecimenNameFrame)
+
+    res = Client.publish_data(SpecimenDataFrame)
+    print(res)
+    time.sleep(1)
