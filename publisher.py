@@ -5,7 +5,9 @@ import random
 import configparser
 import shlex
 
-class MqttCommunicator:
+#TODO: seperate Code from MqttPublisher an elements that belong to the main Thread
+
+class MqttPublisher:
     def __init__(self, client_name, mqtt_broker, mqtt_port, mqtt_username, mqtt_passkey):
         """
         :param client_name: Name for the mqtt client Type: str
@@ -98,6 +100,41 @@ class MqttCommunicator:
 
 #class end
 
+class MqttSubscriber:
+    """
+    class for retriving control signals via MQTT
+    (check in an out of Specimen und mobile climat messurment stations via android app)
+    """
+
+    def __init__(self, client_name, mqtt_broker, mqtt_port, mqtt_username, mqtt_passkey, mqtt_topic):
+
+        self.Client_Name = client_name
+        self.mqtt_Broker = mqtt_broker
+        self.mqtt_Port = mqtt_port
+        self.mqtt_Username = mqtt_username
+        self.mqtt_Passkey = mqtt_passkey
+        self.mqtt_Topic = mqtt_topic
+
+        #configure mqtt client
+        client = mqtt.Client(self.Client_Name)
+        client.connect(self.mqtt_Broker)
+        client.subscribe(self.mqtt_Topic)
+        client.on_message = on_message
+
+
+#TODO: implement the subscriber class in qThread an emmit a signal for handling the PKID resivment
+
+    def on_message(self, client, userdata, message):
+        print("received message: ", str(message.payload.decode("utf-8")))
+
+
+    def run(self):
+        while True:
+            # clint needs to run in a loop
+            client.loop_start()
+            time.sleep(60)
+            client.loop_stop()
+
 
 def Convert_Str_To_List(datastring):
     """
@@ -157,7 +194,7 @@ logging.basicConfig(filename='probenmonitoring.log', filemode='w', level=logging
 
 
 #main program
-Client = MqttCommunicator(DeviceName, broker, port, "", "")
+Client = MqttPublisher(DeviceName, broker, port, "", "")
 
 for y in range(0,20):
     NewFrame = randomize_Dataframe(SpecimenDataFrame)
