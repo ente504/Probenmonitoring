@@ -2,28 +2,10 @@ import paho.mqtt.client as mqtt
 import logging
 import time
 import random
-#TODO: implement Configparser
-
-#Variable Declerations
-"""
-The contained Data in this Dataframe is of Type String
-The order of the Elements is to be respected 0 to 6
-SpecimenDataFrame = [PKID, Temp, Humidity, Weight, Measurement 1, Measurement 2, Measurement 3]
-The Names are taken from the SpecimenNameFrame
-"""
-
-SpecimenNameList = ["PKID", "Temp", "Humidity", "Weight", "Measurement1", "Measurement2", "Measurement3"]
-SpecimenDataList = ["1221-14-5", "25", "0,62", None, None, None, None]
-SpecimenDataFrame = [SpecimenNameList, SpecimenDataList]
-
-broker="192.168.192.21"
-port=1883
-logging.basicConfig(filename='probenmonitoring.log', filemode='w', level=logging.DEBUG)
-
-
+import configparser
+import shlex
 
 class MqttCommunicator:
-
     def __init__(self, client_name, mqtt_broker, mqtt_port, mqtt_username, mqtt_passkey):
         """
         :param client_name: Name for the mqtt client Type: str
@@ -113,6 +95,24 @@ class MqttCommunicator:
             logging.ERROR("not all elements of the SpecimenDataFrame are named. Check the SpecimenNameFrame!")
         return published_dataframe
 
+
+#class end
+#TODO: implement Configparser
+
+def Convert_Str_To_List(datastring):
+    """
+    :param datastring: string that shoud be counerted to a List. Seperation wenn the elemen ", " (with space) is found.
+    :return: the input datastring is returnd as a List element. Additionaly all found "None" Strings are converted
+             to the python None Element.
+    """
+    DataList = datastring.split(", ")
+
+    for index, value in enumerate(DataList):
+        if value == "None":
+            DataList[index] = None
+    return DataList
+
+
 def randomize_Dataframe(dataFrame):
     """
     :param dataFrame: takes the Dataframe Type 2D Dataframe
@@ -120,17 +120,43 @@ def randomize_Dataframe(dataFrame):
 
     method is for debugging and test purposes. It simulates Sensor Data input in form of randomized Data
     """
-
     dataFrame[1][1] = str(random.randint(10,30))
     dataFrame[1][2] = str(round(random.uniform(0.1, 1),2))
 
     return dataFrame
 
+#Variable Declerations
+#load variable from the config file useing ConfigParser.
+# The config file needs to be locate in the root Folder of the programm
 
-#main
+CONFIG_FILE = "config.ini"
+config = configparser.ConfigParser()
+config.read(CONFIG_FILE)
 
-Client = MqttCommunicator("pi1", broker, port, "", "")
+DeviceName = str(config["GENERAL"]["DeviceName"])
+SpecimenNameString = config["DATA"]["SpecimenNameList"]
+SpecimenDataString = config["DATA"]["SpecimenDefaultData"]
+broker = str(config["MQTT"]["Broker"])
+port = int(config["MQTT"]["Port"])
+username = str(config["MQTT"]["UserName"])
+passkey = str(config["MQTT"]["PassKey"])
 
+#construckt SpecimenDataFrame
+"""
+The contained Data in this Dataframe is of Type String
+The order of the Elements is to be respected 0 to 6
+SpecimenDataFrame = [PKID, Temp, Humidity, Weight, Measurement 1, Measurement 2, Measurement 3]
+The Names are taken from the SpecimenNameFrame
+"""
+SpecimenNameList = Convert_Str_To_List(SpecimenNameString)
+SpecimenDataList = Convert_Str_To_List(SpecimenDataString)
+SpecimenDataFrame = [SpecimenNameList, SpecimenDataList]
+
+logging.basicConfig(filename='probenmonitoring.log', filemode='w', level=logging.DEBUG)
+
+
+#main program
+Client = MqttCommunicator(DeviceName, broker, port, "", "")
 
 for y in range(0,20):
     NewFrame = randomize_Dataframe(SpecimenDataFrame)
@@ -139,4 +165,3 @@ for y in range(0,20):
     res = Client.publish_data(SpecimenDataFrame)
     print(res)
     time.sleep(1)
-
