@@ -97,7 +97,7 @@ class MqttCommunicator:
 
 
 #class end
-#TODO: implement Configparser
+
 
 def Convert_Str_To_List(datastring):
     """
@@ -110,6 +110,7 @@ def Convert_Str_To_List(datastring):
     for index, value in enumerate(DataList):
         if value == "None":
             DataList[index] = None
+
     return DataList
 
 
