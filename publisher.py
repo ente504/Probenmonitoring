@@ -1,4 +1,6 @@
 import paho.mqtt.client as mqtt
+from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
+from t_temphumsensor import TempHumSensor
 import logging
 import time
 import random
@@ -120,19 +122,27 @@ class MqttSubscriber:
         client.connect(self.mqtt_Broker)
         client.subscribe(self.mqtt_Topic)
         client.on_message = on_message
+        client.on_connect = on_connect
 
 
 #TODO: implement the subscriber class in qThread an emmit a signal for handling the PKID resivment
 
-    def on_message(self, client, userdata, message):
+    def on_message(client, userdata, message):
         print("received message: ", str(message.payload.decode("utf-8")))
+        #TODO: emitte signal to mainthread
 
+    def on_connect(client, userdata, flags, rc):
+        if rc == 0:
+            print("connected OK Returned code=", rc)
+        else:
+            print("Bad connection Returned code=", rc)
 
     def run(self):
         while True:
             # clint needs to run in a loop
             client.loop_start()
-            time.sleep(60)
+            client.on_message = on_message
+            time.sleep(1)
             client.loop_stop()
 
 
@@ -162,6 +172,28 @@ def randomize_Dataframe(dataFrame):
     dataFrame[1][2] = str(round(random.uniform(0.1, 1),2))
 
     return dataFrame
+
+def handle_Temp_Signal(temperature):
+    print(temperature)
+
+def handle_Humid_Signal(humidity):
+    print(humidity)
+
+def handle_Heater_Signal():
+    print("heater gestartet")
+
+def runTHREAD(self):
+     # init of the Tread class Objekt
+    self.sensor = TempHumSensor(wait_time=2, heater_status=False, heater_interval=10)
+    # run Thread Objekt
+    self.sensor.start()
+
+    # connect signals to worker Methods
+    self.sensor.finished.connect(self.fp.quit)
+    self.sensor.finished.connect(self.fp.deleteLater)
+    self.sensor.Temperature_Signal.connect(self.handle_Temp_Signal)
+    self.sensor.relative_Humidity_Signal.connect(self.handle_Humid_Signal)
+    self.sensor.Heater_Signal.connect(self.handle_Heater_Signal)
 
 #Variable Declerations
 #load variable from the config file useing ConfigParser.
