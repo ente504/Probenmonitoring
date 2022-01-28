@@ -40,6 +40,7 @@ class MqttPublisher:
 
             if self.mqtt_Username not in ["", " ", None]  or self.mqtt_Passkey not in ["", " ", None]:
                 self.mqtt_client.username_pw_set(self.mqtt_Username, self.mqtt_Passkey)
+                print("PW set")
             else:
                 logging.info("the server is not using a User authentication")
 
@@ -80,34 +81,20 @@ class MqttPublisher:
         logging.info("data published")
         pass
 
-    def publish_data(self, dataframe):
+
+    def publish(self, topic, data):
         """
-        :param dataframe: Takes the Dataframe with the Specimen Data to publish via mqtt
-        :return: retuns the actually published Data as a list of String.
-
-        method goes throw the Dataframe and publishes each measurement not None to the corresponding Topic under the
-        Topic of the PKID transfeared in the Dataframe
+        This method publishes Data in an provided Topic on the specified Broker.
+        :param topic: Topic to publish th Data in String format
+        :param data: Data that should be published.
+        :return: retuns published Data
         """
-        published_dataframe = []
-        if len(dataframe[0]) == len(dataframe[1]):
 
-            if dataframe[1][0] not in ["", " "]:
-                pkid = str(dataframe[1][0])
-                dataframe_length = int(len(dataframe[1]))
-
-                for x in range(1, dataframe_length):
-                    if dataframe[1][x] not in ["", " ", None]:
-                        mqtt_Topic = str(pkid + "/" + str(dataframe[0][x]))
-                        published_dataframe.append(dataframe[0][x] + " " + dataframe[1][x])
-                        try:
-                            self.mqtt_client.publish(mqtt_Topic, str(dataframe[1][x]))
-                        except:
-                            logging.info("Error while publishing Data to the mqtt broker")
-            else:
-                logging.ERROR("no PKID defined! Was not able to publish Information")
-        else:
-            logging.ERROR("not all elements of the SpecimenDataFrame are named. Check the SpecimenNameFrame!")
-        return published_dataframe
+        try:
+            self.mqtt_client.publish(topic, data)
+        except:
+            logging.ERROR("Error while publishing Data to the mqtt broker")
+        return data
 
 
 #class end

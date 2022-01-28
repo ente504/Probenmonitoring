@@ -6,6 +6,8 @@
 
 
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot, QCoreApplication
+
+import main
 from t_temphumsensor import TempHumSensor
 from mqtt_communicator import MqttPublisher
 import logging
@@ -13,6 +15,8 @@ import time
 import random
 import configparser
 import sys
+import csv
+import json
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
@@ -22,6 +26,7 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QVBoxLayout,
     QWidget)
+
 
 def convert_str_to_list(datastring):
     """
@@ -43,9 +48,45 @@ def randomize_dataframe(dataframe):
     :return: returns modified Dataframe
     method is for debugging and test purposes. It simulates Sensor Data input in form of randomized Data
     """
-    dataframe[1][1] = str(random.randint(10,30))
-    dataframe[1][2] = str(round(random.uniform(0.1, 1),2))
+    dataframe[1][1] = str(random.randint(10, 30))
+    dataframe[1][2] = str(round(random.uniform(0.1, 1), 2))
     return dataframe
+
+
+def build_json(dataframe):
+    """
+    :param dataframe: takes the Dataframe Dataframe
+    :return: json string build oput of the provided Dataframe
+    """
+    data_set = {}
+    dataframe_length = int(len(dataframe[1]))
+
+    if len(dataframe[0]) == len(dataframe[1]):
+        for x in range(0, dataframe_length):
+            if dataframe[1][x] not in ["", " ", None]:
+                key = str(dataframe[0][x])
+                value = str(dataframe[1][x])
+                data_set[key] = [value]
+
+            json_dump = json.dumps(data_set)
+    else:
+        logging.ERROR("Error while transforming list into json String")
+
+    # print(json_dump)
+    return json_dump
+
+
+def init_csv(top_line_content):
+    with open('temp_hum_log.csv', 'a', newline='') as log_file:
+        writer = csv.writer(log_file)
+        writer.writerow(top_line_content)
+
+
+def update_csv(content):
+    with open('temp_hum_log.csv', 'a', newline='') as log_file:
+        writer = csv.writer(log_file)
+        writer.writerow(content)
+        print(content)
 
 
 # Variable declerations:
@@ -65,6 +106,7 @@ broker = str(config["MQTT"]["Broker"])
 port = int(config["MQTT"]["Port"])
 username = str(config["MQTT"]["UserName"])
 passkey = str(config["MQTT"]["PassKey"])
+BaseTopic = str(config["MQTT"]["BaseTopic"])
 
 """
 construkt SpecimenDataFrame:
@@ -80,20 +122,60 @@ SpecimenDataFrame = [SpecimenNameList, SpecimenDataList]
 logging.basicConfig(filename="probenmonitoring.log", filemode="w", level=logging.DEBUG)
 
 
-class ConsoleWorker(QObject):
+class ConsoleWorkerSensor(QObject):
     """
     this class is for packing the signal handling methods and the runing progress of the basic application
     in a QObjekt frame to take part in the QApplication EventLoop
     """
-    #TODO: Change Signal Datatype to Flaot for Temp and humidety
+
+    # TODO: Change Signal Datatype to Flaot for Temp and humidety
 
     def handle_temp_signal(self, temperature):
+        """
+        resives the Signal with the Temperatur Information from the Sensor Thread and
+        positions it in the corresponding slot in the Dataframe.
+        :param temperature: Temperatur resived ffrom the Sensor Thread as String
+        """
+        # console output
         print("\nTemperature: %0.1f C" % float(temperature))
-        SpecimenDataFrame[1][1] = str(temperature)
+
+        # update SpecimenDataframe
+        entry_found = False
+        i = 0
+
+        # find right slot in the SpecimenDataframe
+        while not entry_found:
+            if SpecimenDataFrame[0][i] == "Temp":
+                SpecimenDataFrame[1][i] = float(temperature)
+                entry_found = True
+            if i == len(SpecimenDataFrame[0]) and entry_found is False:
+                print("no category Temp was found in the SpecimenDataframe. please check config.ini")
+                entry_found = False
+            i += 1
 
     def handle_humid_signal(self, humidity):
+        """
+        resives the Signal with the humidety Information from the Sensor Thread and
+        positions it in the corresponding slot in the Dataframe.
+        :param temperature: Humidity resieved from the Sensor Thread as String
+        """
+
+        # console output
         print("Humidity: %0.1f %%" % float(humidity))
-        SpecimenDataFrame[1][2] = str(humidity)
+
+        # update SpecimenDataframe
+        entry_found = False
+        i = 0
+
+        # find right slot in the SpecimenDataframe
+        while not entry_found:
+            if SpecimenDataFrame[0][i] == "Humidity":
+                SpecimenDataFrame[1][i] = float(humidity)
+                entry_found = True
+            if i == len(SpecimenDataFrame[0]) and entry_found is False:
+                print("no category Temp was found in the SpecimenDataframe. please check config.ini")
+                entry_found = False
+            i += 1
 
     def handle_heater_signal(self):
         print("heater gestartet")
@@ -110,33 +192,53 @@ class ConsoleWorker(QObject):
         self.sensor.Heater_Signal.connect(self.handle_heater_signal)
         # run Thread Object
         self.sensor.start()
-        #self.sensor.start_sensor()
-
-    def start_worker(self):
-
-        print("Threadstart angestoßen")
-        self.run_measuring_thread()
-        print("thread gestartet")
-
-        #hier Programmtext reinhacken#
+        # self.sensor.start_sensor()
 
 
+class Publish_Data(QThread):
+    """
+    Thread class for continuously publishing the updated specimenDataframe
+    to the MQTT Broker
+    """
 
-#main program
-#Client = MqttPublisher(DeviceName, broker, port, "", "")
+    @pyqtSlot()
+    def run(self):
+        self.Client = MqttPublisher(DeviceName, broker, port, username, passkey)
+
+        while True:
+            self.Client.publish(BaseTopic, build_json(SpecimenDataFrame))
+            time.sleep(5)
 
 
+class ConsoleWorkerPublish(QObject):
+    """
+    corresponding worker Object to  for continuously publishing the updated specimenDataframe
+    """
+
+    def start_communication_tread(self):
+        self.Communicator = Publish_Data()
+        self.Communicator.start()
+
+
+# main program
 
 
 if __name__ == "__main__":
 
     if DeviceType == 1:
+        # init_csv(SpecimenDataFrame[0])
         app = QCoreApplication(sys.argv)
-        cw = ConsoleWorker()
-        cw.start_worker()
+        cws = ConsoleWorkerSensor()
+        cws.run_measuring_thread()
+        print("gestartet")
+
+        cwp = ConsoleWorkerPublish()
+        cwp.start_communication_tread()
+        print("cwp gestartet")
+
         sys.exit(app.exec())
 
-    #folloed by other IF clouses for other Device Types
+    # folloed by other IF clouses for other Device Types
 
-    #TODO: understand PyQt Apllications
-    #TODO: Pack Sensor in Movetothreadfunktion
+    # TODO: understand PyQt Apllications
+    # TODO: Pack Sensor in Movetothreadfunktion
