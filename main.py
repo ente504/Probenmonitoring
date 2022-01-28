@@ -7,7 +7,6 @@
 
 from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot, QCoreApplication
 
-import main
 from t_temphumsensor import TempHumSensor
 from mqtt_communicator import MqttPublisher
 import logging
@@ -59,6 +58,7 @@ def build_json(dataframe):
     :return: json string build oput of the provided Dataframe
     """
     data_set = {}
+    json_dump=""
     dataframe_length = int(len(dataframe[1]))
 
     if len(dataframe[0]) == len(dataframe[1]):
@@ -72,7 +72,6 @@ def build_json(dataframe):
     else:
         logging.ERROR("Error while transforming list into json String")
 
-    # print(json_dump)
     return json_dump
 
 
@@ -89,10 +88,11 @@ def update_csv(content):
         print(content)
 
 
-# Variable declerations:
-
-# load variable from the config file using ConfigParser.
-# The config file needs to be locate in the root Folder of the program
+"""
+Variable declerations:
+oad variable from the config file using ConfigParser.
+The config file needs to be locate in the root Folder of the program
+"""
 
 CONFIG_FILE = "config.ini"
 config = configparser.ConfigParser()
@@ -100,6 +100,7 @@ config.read(CONFIG_FILE)
 
 DeviceName = str(config["GENERAL"]["DeviceName"])
 DeviceType = int(config["GENERAL"]["DeviceType"])
+Interval = int(config["GENERAL"]["Interval"])
 SpecimenNameString = config["DATA"]["SpecimenNameList"]
 SpecimenDataString = config["DATA"]["SpecimenDefaultData"]
 broker = str(config["MQTT"]["Broker"])
@@ -115,22 +116,24 @@ The order of the Elements is to be respected 0 to 6
 SpecimenDataFrame = [PKID, Temp, Humidity, Weight, Measurement 1, Measurement 2, Measurement 3]
 The Names are taken from the SpecimenNameFrame
 """
+
 SpecimenNameList = convert_str_to_list(SpecimenNameString)
 SpecimenDataList = convert_str_to_list(SpecimenDataString)
 SpecimenDataFrame = [SpecimenNameList, SpecimenDataList]
-
+#initialize logging
 logging.basicConfig(filename="probenmonitoring.log", filemode="w", level=logging.DEBUG)
 
 
 class ConsoleWorkerSensor(QObject):
     """
     this class is for packing the signal handling methods and the runing progress of the basic application
-    in a QObjekt frame to take part in the QApplication EventLoop
+    in a QObject frame to take part in the QApplication EventLoop
     """
 
     # TODO: Change Signal Datatype to Flaot for Temp and humidety
 
-    def handle_temp_signal(self, temperature):
+    @staticmethod
+    def handle_temp_signal(temperature):
         """
         resives the Signal with the Temperatur Information from the Sensor Thread and
         positions it in the corresponding slot in the Dataframe.
@@ -183,7 +186,7 @@ class ConsoleWorkerSensor(QObject):
     def run_measuring_thread(self):
 
         # init of the Tread class Object
-        self.sensor = TempHumSensor(wait_time=2, heater_status=True, heater_interval=10)
+        self.sensor = TempHumSensor(wait_time=Interval, heater_status=True, heater_interval=10)
         # connect signals to worker Methods
         self.sensor.finished.connect(self.sensor.quit)
         self.sensor.finished.connect(self.sensor.deleteLater)
@@ -195,7 +198,7 @@ class ConsoleWorkerSensor(QObject):
         # self.sensor.start_sensor()
 
 
-class Publish_Data(QThread):
+class PublishData(QThread):
     """
     Thread class for continuously publishing the updated specimenDataframe
     to the MQTT Broker
@@ -207,7 +210,7 @@ class Publish_Data(QThread):
 
         while True:
             self.Client.publish(BaseTopic, build_json(SpecimenDataFrame))
-            time.sleep(5)
+            time.sleep(Interval+1)
 
 
 class ConsoleWorkerPublish(QObject):
@@ -216,7 +219,7 @@ class ConsoleWorkerPublish(QObject):
     """
 
     def start_communication_tread(self):
-        self.Communicator = Publish_Data()
+        self.Communicator = PublishData()
         self.Communicator.start()
 
 
