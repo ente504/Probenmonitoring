@@ -37,6 +37,7 @@ class MqttPublisher:
 
             if self.mqtt_Username not in ["", " ", None]  or self.mqtt_Passkey not in ["", " ", None]:
                 self.mqtt_client.username_pw_set(self.mqtt_Username, self.mqtt_Passkey)
+                print("PW set")
             else:
                 logging.info("the server is not using a User authentication")
 
@@ -45,7 +46,6 @@ class MqttPublisher:
             self.mqtt_client.connect(mqtt_broker, mqtt_port)
         except:
             print("no connection to the mqtt broker")
-            logging.ERROR("no connection to the mqtt broker")
 
     def return_Client_Name(self):
         return self.Client_Name
@@ -74,7 +74,7 @@ class MqttPublisher:
                           " username: " + self.mqtt_Username + " Passkey: " + self.mqtt_Passkey)
 
     def on_publish(self, client, userdata, result):
-        #print("data published \n")
+        print("data published \n")
         logging.info("data published")
         pass
 
@@ -95,44 +95,3 @@ class MqttPublisher:
 
 
 #class end
-
-class MqttSubscriber(QThread):
-    """
-    class for retriving control signals via MQTT
-    (check in an out of Specimen und mobile climat messurment stations via android app)
-    """
-
-    def __init__(self, client_name, mqtt_broker, mqtt_port, mqtt_username, mqtt_passkey, mqtt_topic):
-
-        self.Client_Name = client_name
-        self.mqtt_Broker = mqtt_broker
-        self.mqtt_Port = mqtt_port
-        self.mqtt_Username = mqtt_username
-        self.mqtt_Passkey = mqtt_passkey
-        self.mqtt_Topic = mqtt_topic
-
-        #configure mqtt client
-        client = mqtt.Client(self.Client_Name)
-        client.connect(self.mqtt_Broker)
-        client.subscribe(self.mqtt_Topic)
-        client.on_message = on_message
-        client.on_connect = on_connect
-
-
-    def on_message(client, userdata, message):
-        print("received message: ", str(message.payload.decode("utf-8")))
-        #TODO: emitte signal to mainthread
-
-    def on_connect(client, userdata, flags, rc):
-        if rc == 0:
-            print("connected OK Returned code=", rc)
-        else:
-            print("Bad connection Returned code=", rc)
-
-    def run(self):
-        while True:
-            # clint needs to run in a loop
-            client.loop_start()
-            client.on_message = on_message
-            time.sleep(1)
-            client.loop_stop()

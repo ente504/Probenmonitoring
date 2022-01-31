@@ -13,7 +13,7 @@ import adafruit_sht31d
 
 
 class TempHumSensor(QThread):
-    #TODO: implement a .csv logger for local storage if needed
+    # TODO: implement a misstake detection
     #TODO: write comments for the methods
 
     # Signals
@@ -37,6 +37,8 @@ class TempHumSensor(QThread):
     def stop(self):
         self.runner = False
         self.i2c.deinit()
+        print('Stopping thread...')
+        self.terminate()
 
     @pyqtSlot(str)
     def run(self):
@@ -66,12 +68,3 @@ class TempHumSensor(QThread):
                     logging.ERROR("Error while using the Heater")
             time.sleep(self.wait_time)
         return [self.Temperature, self.relative_Humidity]
-
-    def stop(self):
-        self.is_running = False
-        print('Stopping thread...')
-        self.terminate()
-
-
-
-
