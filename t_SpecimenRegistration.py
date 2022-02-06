@@ -86,7 +86,7 @@ class MqttSubscriber(QThread):
 
     @pyqtSlot(str)
     def run(self):
-        while True:
+        while self.is_running:
             # client needs to run in a loop
             self.mqtt_client.loop_start()
             self.mqtt_client.on_message = self.on_message
