@@ -10,6 +10,7 @@ from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot, QCoreApplicatio
 from t_temphumsensor import TempHumSensor
 from t_SpecimenRegistration import MqttSubscriber
 from mqtt_communicator import MqttPublisher
+import lcddriver
 import logging
 import time
 import random
@@ -124,8 +125,13 @@ The Names are taken from the SpecimenNameFrame
 SpecimenNameList = convert_str_to_list(SpecimenNameString)
 SpecimenDataList = convert_str_to_list(SpecimenDataString)
 SpecimenDataFrame = [SpecimenNameList, SpecimenDataList]
+
 # initialize logging
 logging.basicConfig(filename="probenmonitoring.log", filemode="w", level=logging.DEBUG)
+
+# initialize LCD Display
+lcd_display = lcddriver.lcd()
+
 
 
 class ConsoleWorkerSensor(QObject):
@@ -133,6 +139,17 @@ class ConsoleWorkerSensor(QObject):
     this class is for packing the signal handling methods and the running progress of the basic application
     in a QObject frame to take part in the QApplication EventLoop.
     """
+
+    LCD_Display_String = "T:      H:     "
+
+    @staticmethod
+    def Replace_Substring_Between_Index(singleLine, stringToReplace, startPos, endPos):
+
+        try:
+            singleLine = singleLine[:startPos] + stringToReplace + singleLine[endPos:]
+        except Exception as e:
+            exception = "There is Exception at this step while calling replace_str_index method, Reason = " + str(e)
+        return singleLine
 
     @staticmethod
     def handle_temp_signal(temperature):
@@ -143,6 +160,13 @@ class ConsoleWorkerSensor(QObject):
         """
         # console output
         print("\nTemperature: %0.1f C" % float(temperature))
+        # LCD display output
+        ConsoleWorkerSensor.LCD_Display_String = ConsoleWorkerSensor.Replace_Substring_Between_Index(
+            ConsoleWorkerSensor.LCD_Display_String,
+            "%0.2f" % float(temperature),
+            2,
+            7)
+        lcd_display.lcd_display_string(ConsoleWorkerSensor.LCD_Display_String, 2)
 
         # update SpecimenDataframe
         entry_found = False
@@ -168,6 +192,14 @@ class ConsoleWorkerSensor(QObject):
 
         # console output
         print("Humidity: %0.1f %%" % float(humidity))
+
+        # LCD display output
+        ConsoleWorkerSensor.LCD_Display_String = ConsoleWorkerSensor.Replace_Substring_Between_Index(
+            ConsoleWorkerSensor.LCD_Display_String,
+            "%0.2f" % float(humidity),
+            10,
+            15)
+        lcd_display.lcd_display_string(ConsoleWorkerSensor.LCD_Display_String, 2)
 
         # update SpecimenDataframe
         entry_found = False
@@ -221,6 +253,7 @@ class ConsoleWorkerSpecimenRegistration(QObject):
         if old_pkid != new_pkid:
             SpecimenDataFrame[1][0] = new_pkid
             print("PKID " + new_pkid + " has been checked in.")
+            lcd_display.lcd_display_string("PKID: " + str(SpecimenDataFrame[1][0]), 1)
             logging.info("PKID " + new_pkid + " has been checked in.")
 
     def run_specimen_registration_thread(self):
@@ -389,6 +422,9 @@ if __name__ == "__main__":
         # start the pyQT runtime Environment
         app = QCoreApplication(sys.argv)
 
+        #show Default LCD Display
+        lcd_display.lcd_clear()
+        lcd_display.lcd_display_string("PKID: " + str(SpecimenDataFrame[1][0]), 1)
         # start online Messenger in a separate thread
         cwom = ConsoleWorkerOnlineMessenger()
         cwom.run_online_messenger()

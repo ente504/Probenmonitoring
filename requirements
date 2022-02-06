@@ -1,3 +1,4 @@
 paho-mqtt
 pyQt5
 adafruit-circuitpython-sht31d
+RPi.GPIO
