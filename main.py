@@ -9,7 +9,7 @@ from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot, QCoreApplicatio
 
 from t_temphumsensor import TempHumSensor
 from t_SpecimenRegistration import MqttSubscriber
-from mqtt_communicator import MqttPublisher
+from t_publishData import MqttPublisher
 import lcddriver
 import logging
 import time
@@ -30,6 +30,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget)
 
+# TODO: write Misstake detection procedure
 
 def convert_str_to_list(datastring):
     """
@@ -133,7 +134,6 @@ logging.basicConfig(filename="probenmonitoring.log", filemode="w", level=logging
 lcd_display = lcddriver.lcd()
 
 
-
 class ConsoleWorkerSensor(QObject):
     """
     this class is for packing the signal handling methods and the running progress of the basic application
@@ -143,13 +143,21 @@ class ConsoleWorkerSensor(QObject):
     LCD_Display_String = "T:      H:     "
 
     @staticmethod
-    def Replace_Substring_Between_Index(singleLine, stringToReplace, startPos, endPos):
-
+    def replace_substring_between_index(single_line, string_to_replace, start_pos, end_pos):
+        """
+        this method is for updating the temperature and humidity Data in the LCD_Display_String
+        for display on the LCD display.
+        :param single_line: input string
+        :param string_to_replace: string that should replace part of the input string
+        :param start_pos: insert start position
+        :param end_pos: insert end position
+        :return: returns the input string with the patched in replacement String
+        """
         try:
-            singleLine = singleLine[:startPos] + stringToReplace + singleLine[endPos:]
+            single_line = single_line[:start_pos] + string_to_replace + single_line[end_pos:]
         except Exception as e:
             exception = "There is Exception at this step while calling replace_str_index method, Reason = " + str(e)
-        return singleLine
+        return single_line
 
     @staticmethod
     def handle_temp_signal(temperature):
@@ -161,7 +169,7 @@ class ConsoleWorkerSensor(QObject):
         # console output
         print("\nTemperature: %0.1f C" % float(temperature))
         # LCD display output
-        ConsoleWorkerSensor.LCD_Display_String = ConsoleWorkerSensor.Replace_Substring_Between_Index(
+        ConsoleWorkerSensor.LCD_Display_String = ConsoleWorkerSensor.replace_substring_between_index(
             ConsoleWorkerSensor.LCD_Display_String,
             "%0.2f" % float(temperature),
             2,
@@ -194,7 +202,7 @@ class ConsoleWorkerSensor(QObject):
         print("Humidity: %0.1f %%" % float(humidity))
 
         # LCD display output
-        ConsoleWorkerSensor.LCD_Display_String = ConsoleWorkerSensor.Replace_Substring_Between_Index(
+        ConsoleWorkerSensor.LCD_Display_String = ConsoleWorkerSensor.replace_substring_between_index(
             ConsoleWorkerSensor.LCD_Display_String,
             "%0.2f" % float(humidity),
             10,
@@ -235,12 +243,18 @@ class ConsoleWorkerSensor(QObject):
 
 class ConsoleWorkerSpecimenRegistration(QObject):
     """
-    class to start the watcher Thread for resiving new PKIDs
-    And handling PKIDs
+    class to start the watcher Thread for receiving new PKIDs
+    and handling PKIDs.
     """
 
     @staticmethod
     def handle_new_pkid_signal(pkid):
+        """
+        The method checks if the with the pyQt received PKID is a new or an old ID.
+        It either checks the Specimen in or out.
+        :param pkid: pkid type String transferred Data from th pyQt Signal
+        :return: returns pkid as String
+        """
 
         old_pkid = SpecimenDataFrame[1][0]
         new_pkid = pkid
@@ -248,17 +262,23 @@ class ConsoleWorkerSpecimenRegistration(QObject):
         if old_pkid == new_pkid:
             SpecimenDataFrame[1][0] = None
             print("PKID " + old_pkid + " has been checked out.")
+            lcd_display.lcd_display_string("                ", 1)
+            lcd_display.lcd_display_string("PKID: " + str(SpecimenDataFrame[1][0]), 1)
             logging.info("PKID " + old_pkid + " has been checked out.")
 
         if old_pkid != new_pkid:
             SpecimenDataFrame[1][0] = new_pkid
             print("PKID " + new_pkid + " has been checked in.")
+            lcd_display.lcd_display_string("                ", 1)
             lcd_display.lcd_display_string("PKID: " + str(SpecimenDataFrame[1][0]), 1)
             logging.info("PKID " + new_pkid + " has been checked in.")
 
-    def run_specimen_registration_thread(self):
+        return new_pkid
 
-        self.Client = MqttSubscriber(SpecimenDataFrame[1][1], broker, port, username, passkey, str(SpecimenDataFrame[1][1]))
+    def run_specimen_registration_thread(self):
+        
+        topic = str(SpecimenDataFrame[1][1] + "/PKID")
+        self.Client = MqttSubscriber(SpecimenDataFrame[1][1], broker, port, username, passkey, topic)
         # connect signals to worker methods
         self.Client.finished.connect(self.Client.quit)
         self.Client.finished.connect(self.Client.deleteLater)
@@ -279,7 +299,8 @@ class PublishData(QThread):
         self.Client = MqttPublisher(DeviceName, broker, port, username, passkey)
 
         while True:
-            self.Client.publish(BaseTopic, build_json(SpecimenDataFrame))
+            if str(SpecimenDataFrame[1][0]) not in ["", " ", "none", "None", "False", "false"]:
+                self.Client.publish(BaseTopic, build_json(SpecimenDataFrame))
             time.sleep(Interval+1)
 
 
@@ -425,6 +446,7 @@ if __name__ == "__main__":
         #show Default LCD Display
         lcd_display.lcd_clear()
         lcd_display.lcd_display_string("PKID: " + str(SpecimenDataFrame[1][0]), 1)
+
         # start online Messenger in a separate thread
         cwom = ConsoleWorkerOnlineMessenger()
         cwom.run_online_messenger()

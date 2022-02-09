@@ -35,7 +35,7 @@ class MqttPublisher:
             #setup mqtt client
             self.mqtt_client = mqtt.Client(self.Client_Name)
 
-            if self.mqtt_Username not in ["", " ", None]  or self.mqtt_Passkey not in ["", " ", None]:
+            if self.mqtt_Username not in ["", " ", None] or self.mqtt_Passkey not in ["", " ", None]:
                 self.mqtt_client.username_pw_set(self.mqtt_Username, self.mqtt_Passkey)
                 print("PW set")
             else:
@@ -47,19 +47,19 @@ class MqttPublisher:
         except:
             print("no connection to the mqtt broker")
 
-    def return_Client_Name(self):
+    def return_Client_name(self):
         return self.Client_Name
 
-    def return_mqtt_Broker(self):
+    def return_mqtt_broker(self):
         return self.mqtt_Broker
 
-    def return_mqtt_Port(self):
+    def return_mqtt_port(self):
         return self.mqtt_Port
 
-    def return_mqtt_Username(self):
+    def return_mqtt_username(self):
         return self.mqtt_Username
 
-    def return_mqtt_Passkey(self):
+    def return_mqtt_passkey(self):
         return self.mqtt_Passkey
 
     def on_connect(self, client, userdata, flags, rc):
@@ -70,14 +70,13 @@ class MqttPublisher:
                          + self.mqtt_Username + " Passkey: " + self.mqtt_Passkey)
         else:
             print("Bad connection Returned code=", rc)
-            logging.ERROR("Bad connection Returned code= " + rc + " " + self.mqtt_Broker + ":" + self.mqtt_Port +
+            logging.error("Bad connection Returned code= " + rc + " " + self.mqtt_Broker + ":" + self.mqtt_Port +
                           " username: " + self.mqtt_Username + " Passkey: " + self.mqtt_Passkey)
 
+    @staticmethod
     def on_publish(self, client, userdata, result):
-        print("data published \n")
         logging.info("data published")
         pass
-
 
     def publish(self, topic, data):
         """
@@ -90,7 +89,7 @@ class MqttPublisher:
         try:
             self.mqtt_client.publish(topic, data)
         except:
-            logging.ERROR("Error while publishing Data to the mqtt broker")
+            logging.error("Error while publishing Data to the mqtt broker")
         return data
 
 
