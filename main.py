@@ -10,6 +10,7 @@ from PyQt5.QtCore import QObject, QThread, pyqtSignal, pyqtSlot, QCoreApplicatio
 from t_temphumsensor import TempHumSensor
 from t_SpecimenRegistration import MqttSubscriber
 from t_publishData import MqttPublisher
+from t_bat_monitor import BatMonitor
 import lcddriver
 import logging
 import time
@@ -29,6 +30,7 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QVBoxLayout,
     QWidget)
+
 
 # TODO: write Misstake detection procedure
 
@@ -114,6 +116,8 @@ username = str(config["MQTT"]["UserName"])
 passkey = str(config["MQTT"]["PassKey"])
 BaseTopic = str(config["MQTT"]["BaseTopic"])
 
+actual_Bat_Capacity = "";
+
 """
 construct SpecimenDataFrame:
 The Specimen Dataframe contains the relevant Data
@@ -132,6 +136,30 @@ logging.basicConfig(filename="probenmonitoring.log", filemode="w", level=logging
 
 # initialize LCD Display
 lcd_display = lcddriver.lcd()
+
+
+class ConsoleWorkerBatMonitor(QObject):
+    """
+    this class is monitoring the current Voltage, Amperage and remaining Capacity of the
+    battery in the Mobile pis
+    """
+
+    @staticmethod
+    def handle_bat_stat_signal(capacity):
+
+        global actual_Bat_Capacity
+        actual_Bat_Capacity = str(capacity)
+
+    def run_bat_monitor_thread(self):
+        # init of the Tread class Object
+        self.Bat = BatMonitor()
+
+        # connect signals to worker Methods
+        self.Bat.finished.connect(self.Bat.quit)
+        self.Bat.finished.connect(self.Bat.deleteLater)
+        self.Bat.Bat_stat_Signal.connect(self.handle_bat_stat_signal)
+        # run Thread Object
+        self.Bat.start()
 
 
 class ConsoleWorkerSensor(QObject):
@@ -276,7 +304,7 @@ class ConsoleWorkerSpecimenRegistration(QObject):
         return new_pkid
 
     def run_specimen_registration_thread(self):
-        
+
         topic = str(SpecimenDataFrame[1][1] + "/PKID")
         self.Client = MqttSubscriber(SpecimenDataFrame[1][1], broker, port, username, passkey, topic)
         # connect signals to worker methods
@@ -301,7 +329,7 @@ class PublishData(QThread):
         while True:
             if str(SpecimenDataFrame[1][0]) not in ["", " ", "none", "None", "False", "false"]:
                 self.Client.publish(BaseTopic, build_json(SpecimenDataFrame))
-            time.sleep(Interval+1)
+            time.sleep(Interval + 1)
 
 
 class OnlineMessenger(QThread):
@@ -310,7 +338,9 @@ class OnlineMessenger(QThread):
     climate Station
     """
 
-    def __init__(self, client_name, mqtt_broker, mqtt_port, mqtt_username, mqtt_passkey, mqtt_topic):
+    def __init__(self, client_name, mqtt_broker, mqtt_port, mqtt_username, mqtt_passkey, mqtt_topic_online,
+                 mqtt_topic_pkid, mqtt_topic_bat):
+
         """
         :param client_name: Name for the mqtt client Type: str
         :param mqtt_broker: ip or url of the mqtt broker Type: str
@@ -319,14 +349,16 @@ class OnlineMessenger(QThread):
         :param mqtt_passkey: Passkey to log on mqtt broker Type:str
         :param nameframe: Corresponding names for the Data stored in the Specimen Dataframe
         """
-        #asign variables
+        # asign variables
         super().__init__()
         self.Client_Name = client_name
         self.mqtt_Broker = mqtt_broker
         self.mqtt_Port = mqtt_port
         self.mqtt_Username = mqtt_username
         self.mqtt_Passkey = mqtt_passkey
-        self.mqtt_Topic = mqtt_topic
+        self.mqtt_Topic_online = mqtt_topic_online
+        self.mqtt_Topic_pkid = mqtt_topic_pkid
+        self.mqtt_Topic_Bat = mqtt_topic_bat
         self.running = True
 
         try:
@@ -397,7 +429,9 @@ class OnlineMessenger(QThread):
     @pyqtSlot()
     def run(self):
         while self.running:
-            self.publish(self.mqtt_Topic, "True")
+            self.publish(self.mqtt_Topic_online, "True")
+            self.publish(self.mqtt_Topic_pkid, str(SpecimenDataFrame[1][0]))
+            self.publish(self.mqtt_Topic_Bat, str(actual_Bat_Capacity))
             time.sleep(1)
 
     @pyqtSlot()
@@ -412,6 +446,7 @@ class ConsoleWorkerPublish(QObject):
     worker Object to  for continuously publishing the updated specimenDataframe
     see: class PublishData(QThread)
     """
+
     def start_communication_tread(self):
         self.Communicator = PublishData()
         self.Communicator.start()
@@ -422,18 +457,19 @@ class ConsoleWorkerOnlineMessenger(QObject):
     worker Object to  for continuously publishing the "Device online" Message on MQTT
     see: class OnlineMessenger(QThread)
     """
+
     def run_online_messenger(self):
         clientname = SpecimenDataFrame[1][1] + "_status"
-        topic = str(SpecimenDataFrame[1][1]) + "/online"
+        topic_online = str(SpecimenDataFrame[1][1]) + "/online"
+        topic_pkid = str(SpecimenDataFrame[1][1]) + "/current PKID"
+        topic_bat = str(SpecimenDataFrame[1][1]) + "/Bat. capacity"
 
-        self.Client = OnlineMessenger(clientname, broker, port, username, passkey, topic)
+        self.Client = OnlineMessenger(clientname, broker, port, username, passkey, topic_online, topic_pkid, topic_bat)
         # connect signals to worker methods
         self.Client.finished.connect(self.Client.quit)
         self.Client.finished.connect(self.Client.deleteLater)
         # run thread Object
         self.Client.start()
-
-
 
 
 # main program
@@ -443,9 +479,13 @@ if __name__ == "__main__":
         # start the pyQT runtime Environment
         app = QCoreApplication(sys.argv)
 
-        #show Default LCD Display
+        # show Default LCD Display
         lcd_display.lcd_clear()
         lcd_display.lcd_display_string("PKID: " + str(SpecimenDataFrame[1][0]), 1)
+
+        # start battery monitor
+        cwbm = ConsoleWorkerBatMonitor()
+        cwbm.run_bat_monitor_thread()
 
         # start online Messenger in a separate thread
         cwom = ConsoleWorkerOnlineMessenger()
