@@ -306,7 +306,7 @@ class ConsoleWorkerSpecimenRegistration(QObject):
     def run_specimen_registration_thread(self):
 
         topic = str(SpecimenDataFrame[1][1] + "/PKID")
-        self.Client = MqttSubscriber(SpecimenDataFrame[1][1], broker, port, username, passkey, topic)
+        self.Client = MqttSubscriber(SpecimenDataFrame[1][1] + "_reg", broker, port, username, passkey, topic)
         # connect signals to worker methods
         self.Client.finished.connect(self.Client.quit)
         self.Client.finished.connect(self.Client.deleteLater)
@@ -324,7 +324,7 @@ class PublishData(QThread):
 
     @pyqtSlot()
     def run(self):
-        self.Client = MqttPublisher(DeviceName, broker, port, username, passkey)
+        self.Client = MqttPublisher(SpecimenDataFrame[1][1] + "Publish", broker, port, username, passkey)
 
         while True:
             if str(SpecimenDataFrame[1][0]) not in ["", " ", "none", "None", "False", "false"]:

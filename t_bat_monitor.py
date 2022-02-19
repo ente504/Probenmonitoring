@@ -238,7 +238,7 @@ class BatMonitor(QThread):
             #print("Percent:       {:3.1f}%".format(p))
             #print("")
 
-            self.Bat_stat_Signal.emit(str("{:3.1f}%".format(p)))
+            self.Bat_stat_Signal.emit(str("{:3.1f}".format(p)))
 
             #TODO: make signals for the missing mesurments
             time.sleep(5)
